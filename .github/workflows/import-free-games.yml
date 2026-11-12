@@ -61,17 +61,17 @@ jobs:
           integrity = c.execute('PRAGMA integrity_check').fetchone()[0]
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
               f.write(
-                  "### NBA free game import audit\\n"
-                  f"- Games: **{total}**\\n"
-                  f"- Final: **{finals}**\\n"
-                  f"- Not final: **{pending}**\\n"
-                  f"- Coverage: {date_range[0]} to {date_range[1]}\\n"
-                  f"- Last fetched (UTC): {source_time}\\n"
-                  f"- Missing or inconsistent provenance/scores: {inconsistent}\\n"
-                  f"- Duplicate IDs: {duplicate_count}\\n"
-                  f"- Player-game rows (not available on Free): {stats}\\n"
-                  f"- SQLite integrity: {integrity}\\n"
-                  "- Research betting status: **NO BET**\\n"
+                  "### NBA free game import audit\n"
+                  f"- Games: **{total}**\n"
+                  f"- Final: **{finals}**\n"
+                  f"- Not final: **{pending}**\n"
+                  f"- Coverage: {date_range[0]} to {date_range[1]}\n"
+                  f"- Last fetched (UTC): {source_time}\n"
+                  f"- Missing or inconsistent provenance/scores: {inconsistent}\n"
+                  f"- Duplicate IDs: {duplicate_count}\n"
+                  f"- Player-game rows (not available on Free): {stats}\n"
+                  f"- SQLite integrity: {integrity}\n"
+                  "- Research betting status: **NO BET**\n"
               )
           print(f"Audited {total} games: {finals} final, {pending} not final")
           if integrity != 'ok' or inconsistent or duplicate_count or stats:
