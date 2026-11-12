@@ -23,6 +23,7 @@ jobs:
       BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
       SBAI_DB: data/sports.db
       LOOKBACK_DAYS: ${{ inputs.lookback_days || '7' }}
+      FORWARD_DAYS: ${{ inputs.lookback_days == '90' && '0' || '2' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -37,7 +38,7 @@ jobs:
             echo '::error::BDL_API_KEY missing'; exit 1
           fi
       - name: Fetch games/scores from licensed free endpoint
-        run: sbai games-free --days "$LOOKBACK_DAYS" --forward-days 0
+        run: sbai games-free --days "$LOOKBACK_DAYS" --forward-days "$FORWARD_DAYS"
       - name: Audit imported data quality and write run summary
         shell: bash
         run: |
