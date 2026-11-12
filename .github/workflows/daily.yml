@@ -1,8 +1,5 @@
-name: NBA daily research (NO BET on missing data)
+name: Paid NBA player-statistics research (manual only)
 on:
-  schedule:
-    - cron: '35 09 * * *'
-    - cron: '05 18 * * *'
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,20 +15,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Cache research DB (not a guaranteed durable archive)
-        uses: actions/cache@v4
-        with:
-          path: data/sports.db
-          key: nba-db-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            nba-db-${{ runner.os }}-
       - run: python -m pip install -e '.[test]'
-      - name: Run research refresh
+      - name: Require licensed game-player stats endpoint
+        run: sbai check --provider bdl-stats
+      - name: Train and generate research report
         run: sbai update --days 100
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: nba-research-${{ github.run_id }}
+          name: paid-nba-research-${{ github.run_id }}
           path: |
             reports/
             data/sports.db
