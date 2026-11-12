@@ -1,4 +1,4 @@
-# QuantEdge Sports · research MVP (v0.1)
+# SPORTS BETTING AI · research MVP (v0.1)
 
 **Status: NBA player props MVP (PTS/REB/AST), not a production betting engine.**
 No connection credentials, odds or current NBA records are bundled; no fabricated sporting data. `NO BET` is the default whenever evidence is insufficient. Does **not** place any real bets. **18+ / gamble responsibly.**
@@ -21,7 +21,7 @@ No connection credentials, odds or current NBA records are bundled; no fabricate
 
 ```bash
 ## After downloading and extracting the ZIP, open a terminal in its folder
-cd quantedge-sports
+cd sports-betting-ai
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
@@ -121,3 +121,24 @@ sbai football-daily --competition PL --date 2026-11-14
 `PL` (Premier League), `PD` (La Liga), `BL1` (Bundesliga), `SA` (Serie A), `FL1` (Ligue 1) are documented example competition codes; availability depends on your plan. Do not infer xG from these observed-score lambdas: they are not shot-based expected-goals statistics.
 
 Attribution required by provider: **Football data provided by the Football-Data.org API**. See provider terms, including use limits and subscription constraints.
+
+
+## Free NBA data import (fixtures and final scores only)
+
+With a BALLDONTLIE Free API key in `BDL_API_KEY` you can import real NBA games
+without the paid player-statistics endpoint:
+
+```bash
+sbai games-free --days 7 --forward-days 2
+```
+
+This stores source, UTC capture time and an append-only `game_snapshots` trail.
+An upcoming or incomplete game has NULL final scores. No NBA player PTS, REB,
+AST or odds are available from this command. The outcome is **NO BET** until
+paid/licensed player-level historical statistics, real market quotes and
+proper out-of-sample validation are present.
+
+Run the workflow manually at
+`Actions → Import free NBA games (NO BET) → Run workflow`. It also runs once daily.
+The **Actions artifact** includes the SQLite file for each run for up to 30 days;
+it is not a durable database or a replacement for backups. Never commit API keys.
