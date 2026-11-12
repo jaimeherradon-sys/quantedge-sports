@@ -1,0 +1,90 @@
+name: GOAT trial - verify access or backfill historical NBA stats
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'First run probe, then backfill only after paid stats access is confirmed'
+        required: true
+        default: probe
+        type: choice
+        options:
+          - probe
+          - backfill
+      start_date:
+        description: 'Historical starting date for backfill (YYYY-MM-DD, completed games only)'
+        required: true
+        default: '2025-12-01'
+        type: string
+      end_date:
+        description: 'Historical ending date for backfill (YYYY-MM-DD, completed games only)'
+        required: true
+        default: '2026-02-28'
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: goat-trial-provider-access
+  cancel-in-progress: false
+jobs:
+  goat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
+      PYTHONUNBUFFERED: '1'
+      START_DATE: ${{ inputs.start_date }}
+      END_DATE: ${{ inputs.end_date }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[test]'
+      - name: Test GOAT trial request pacing and SQLite safety
+        run: python -m pytest -q tests/test_trial.py tests/test_connectors.py
+      - name: Refuse missing API credential
+        shell: bash
+        run: |
+          if [[ -z "$BDL_API_KEY" ]]; then
+            echo '::error::BDL_API_KEY missing. Add as Actions secret.'
+            exit 1
+          fi
+      - name: Verify player stats and GOAT advanced endpoint
+        if: inputs.action == 'probe'
+        run: python -m sports_betting_ai.trial probe
+      - name: Backfill verified player-game statistics at under 5 requests/minute
+        if: inputs.action == 'backfill'
+        run: >-
+          python -m sports_betting_ai.trial backfill
+          --start "$START_DATE"
+          --end "$END_DATE"
+          --db data/goat-trial.sqlite
+          --report reports/goat-trial-audit.json
+      - name: Show quality summary
+        if: inputs.action == 'backfill' && success()
+        run: |
+          python - <<'PY'
+          import json, os
+          result=json.load(open('reports/goat-trial-audit.json'))
+          a=result['audit']
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write("### NBA historical player stats (verified source)\n")
+              f.write(f"- Period: {result['start']} to {result['end']}\n")
+              f.write(f"- Games: {a['games']}\n")
+              f.write(f"- Final games: {a['final_games']}\n")
+              f.write(f"- Player-game observations: **{a['player_game_rows']}**\n")
+              f.write(f"- Dates with stats: {a['distinct_stat_dates']}\n")
+              f.write(f"- Players with 20+ games in window: {a['players_with_20_plus_games_in_window']}\n")
+              f.write(f"- DB integrity: {a['sqlite_integrity']}\n")
+              f.write("- Status: **NO BET** (no validated model or market quotes)\n")
+          PY
+      - name: Always archive historic data, even if an API interruption occurs
+        if: inputs.action == 'backfill' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nba-goat-history-${{ github.run_id }}
+          path: |
+            data/goat-trial.sqlite
+            reports/goat-trial-audit.json
+          if-no-files-found: warn
+          retention-days: 30
