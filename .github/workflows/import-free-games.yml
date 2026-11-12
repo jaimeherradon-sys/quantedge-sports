@@ -1,6 +1,17 @@
 name: Import free NBA games (NO BET)
 on:
   workflow_dispatch:
+    inputs:
+      lookback_days:
+        description: 'Days of historical NBA games to import (0..90)'
+        required: true
+        default: '7'
+        type: choice
+        options:
+          - '7'
+          - '30'
+          - '60'
+          - '90'
   schedule:
     - cron: '30 10 * * *'
 permissions:
@@ -11,6 +22,7 @@ jobs:
     env:
       BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
       SBAI_DB: data/sports.db
+      LOOKBACK_DAYS: ${{ inputs.lookback_days || '7' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,16 +37,46 @@ jobs:
             echo '::error::BDL_API_KEY missing'; exit 1
           fi
       - name: Fetch games/scores from licensed free endpoint
-        run: sbai games-free --days 7 --forward-days 2
-      - name: Summarize genuine records
+        run: sbai games-free --days "$LOOKBACK_DAYS" --forward-days 0
+      - name: Audit imported data quality and write run summary
+        shell: bash
         run: |
           python - <<'PY'
-          import os, sqlite3
-          c=sqlite3.connect(os.environ['SBAI_DB'])
-          total=c.execute('SELECT COUNT(*) FROM games').fetchone()[0]
-          final=c.execute("SELECT COUNT(*) FROM games WHERE status='final'").fetchone()[0]
-          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
-              f.write(f'### Free NBA API import\n- Games: {total}\n- Final: {final}\n- Player stats: **not available on free tier**\n- Betting status: **NO BET**\n')
+          import os, sqlite3, sys
+          c = sqlite3.connect(os.environ['SBAI_DB'])
+          c.row_factory = sqlite3.Row
+          def one(q):
+              return c.execute(q).fetchone()[0]
+          total = one('SELECT COUNT(*) FROM games')
+          finals = one("SELECT COUNT(*) FROM games WHERE status='final'")
+          pending = total - finals
+          inconsistent = one("""SELECT COUNT(*) FROM games WHERE
+              (status='final' AND (home_score IS NULL OR away_score IS NULL))
+              OR (status<>'final' AND (home_score IS NOT NULL OR away_score IS NOT NULL))
+              OR source<>'balldontlie' OR fetched_at IS NULL""")
+          duplicate_count = one("SELECT COUNT(*) - COUNT(DISTINCT id) FROM games")
+          stats = one("SELECT COUNT(*) FROM player_games")
+          date_range = c.execute('SELECT MIN(game_date), MAX(game_date) FROM games').fetchone()
+          source_time = c.execute('SELECT MAX(fetched_at) FROM games').fetchone()[0]
+          integrity = c.execute('PRAGMA integrity_check').fetchone()[0]
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write(
+                  "### NBA free game import audit\\n"
+                  f"- Games: **{total}**\\n"
+                  f"- Final: **{finals}**\\n"
+                  f"- Not final: **{pending}**\\n"
+                  f"- Coverage: {date_range[0]} to {date_range[1]}\\n"
+                  f"- Last fetched (UTC): {source_time}\\n"
+                  f"- Missing or inconsistent provenance/scores: {inconsistent}\\n"
+                  f"- Duplicate IDs: {duplicate_count}\\n"
+                  f"- Player-game rows (not available on Free): {stats}\\n"
+                  f"- SQLite integrity: {integrity}\\n"
+                  "- Research betting status: **NO BET**\\n"
+              )
+          print(f"Audited {total} games: {finals} final, {pending} not final")
+          if integrity != 'ok' or inconsistent or duplicate_count or stats:
+              print("Invalid free import integrity", file=sys.stderr)
+              sys.exit(1)
           PY
       - uses: actions/upload-artifact@v4
         with:
