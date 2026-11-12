@@ -5,6 +5,12 @@ import pandas as pd
 
 TARGETS = {"player_points": "points", "player_rebounds": "rebounds", "player_assists": "assists"}
 WINDOWS = (5, 10, 20)
+
+def season_start_year(game_dates):
+    """Group NBA games by season to avoid crossing incomplete offseasons."""
+    d = pd.to_datetime(game_dates)
+    return np.where(d.dt.month >= 10, d.dt.year, d.dt.year - 1)
+
 COLS = ["home", "rest_days"] + [f"{s}_{w}" for s in ("points", "rebounds", "assists", "minutes") for w in WINDOWS]
 
 
@@ -19,7 +25,8 @@ def training_rows(history: pd.DataFrame) -> pd.DataFrame:
     h = history.copy()
     h["game_date"] = pd.to_datetime(h["game_date"])
     h = h.sort_values(["player_id", "game_date", "game_id"]).reset_index(drop=True)
-    grp = h.groupby("player_id", sort=False)
+    h["season_start_year"] = season_start_year(h["game_date"])
+    grp = h.groupby(["player_id", "season_start_year"], sort=False)
     h["rest_days"] = (grp["game_date"].diff().dt.days - 1).clip(lower=0)
     for stat in ("points", "rebounds", "assists", "minutes"):
         for w in WINDOWS:
@@ -34,7 +41,9 @@ def future_row(history: pd.DataFrame, player_id: int, game_date: str, game_id: i
         return None
     cutoff = pd.Timestamp(game_date)
     h["game_date"] = pd.to_datetime(h["game_date"])
-    h = h[h["game_date"] < cutoff].sort_values(["game_date", "game_id"])
+    season = cutoff.year if cutoff.month >= 10 else cutoff.year - 1
+    h = h[(h["game_date"] < cutoff) & (season_start_year(h["game_date"]) == season)]
+    h = h.sort_values(["game_date", "game_id"])
     if len(h) < 20:
         return None
     row = {"player_id": player_id, "game_id": game_id, "game_date": cutoff,
