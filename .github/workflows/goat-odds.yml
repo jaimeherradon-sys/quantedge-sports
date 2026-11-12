@@ -18,7 +18,7 @@ on:
       max_games:
         description: 'Maximum games to query, conserves trial API calls'
         required: true
-        default: '3'
+        default: '5'
         type: choice
         options:
           - '1'
@@ -47,7 +47,7 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -e '.[test]'
       - name: Run provider contract and market mathematics tests
-        run: python -m pytest -q tests/test_goat_odds.py
+        run: python -m pytest -q tests/test_goat_odds.py tests/test_market_audit.py
       - name: Require API key
         shell: bash
         run: |
@@ -65,6 +65,9 @@ jobs:
             --date "$GAME_DATE" --max-games "$MAX_GAMES" \
             --db data/goat-odds.sqlite --report reports/goat-odds-summary.json \
             --spacing-seconds 18
+      - name: Audit market integrity and flag cross-book line deviations
+        if: success()
+        run: python -m sports_betting_ai.market_audit --db data/goat-odds.sqlite --out reports/goat-market-integrity.json
       - name: Summarize audited market coverage
         if: success()
         shell: bash
@@ -77,6 +80,9 @@ jobs:
               for key in ('kind','date','games_seen','games_selected','quote_rows','two_way_pairs','raw_response_envelopes','sqlite_integrity'):
                   if key in r:
                       f.write(f'- {key}: **{r[key]}**\n')
+              m=json.load(open('reports/goat-market-integrity.json', encoding='utf-8'))
+              f.write(f"- Markets flagged for review (non-standard lines): **{m['nonstandard_line_quote_count']}**\n")
+              f.write(f"- Two-way median margin: **{m['median_two_way_margin_pct']}%**\n")
               f.write('- **These are market quotes, not model predictions or recommendations.**\n')
               f.write('- Bookmaker coverage is not guaranteed. Opening prices are not closing prices.\n')
           PY
@@ -88,5 +94,6 @@ jobs:
           path: |
             data/goat-odds.sqlite
             reports/goat-odds-summary.json
+            reports/goat-market-integrity.json
           if-no-files-found: warn
           retention-days: 30
