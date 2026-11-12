@@ -1,6 +1,9 @@
 name: Check NBA data connections
 on:
   workflow_dispatch:
+concurrency:
+  group: balldontlie-shared-api-key
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
