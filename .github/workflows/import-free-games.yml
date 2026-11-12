@@ -1,0 +1,43 @@
+name: Import free NBA games (NO BET)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 10 * * *'
+permissions:
+  contents: read
+jobs:
+  import-games:
+    runs-on: ubuntu-latest
+    env:
+      BDL_API_KEY: ${{ secrets.BDL_API_KEY }}
+      SBAI_DB: data/sports.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[test]'
+      - name: Verify free importer unit tests
+        run: python -m pytest -q tests/test_free_games.py
+      - name: Verify configured API secret
+        run: |
+          if [ -z "$BDL_API_KEY" ]; then
+            echo '::error::BDL_API_KEY missing'; exit 1
+          fi
+      - name: Fetch games/scores from licensed free endpoint
+        run: sbai games-free --days 7 --forward-days 2
+      - name: Summarize genuine records
+        run: |
+          python - <<'PY'
+          import os, sqlite3
+          c=sqlite3.connect(os.environ['SBAI_DB'])
+          total=c.execute('SELECT COUNT(*) FROM games').fetchone()[0]
+          final=c.execute("SELECT COUNT(*) FROM games WHERE status='final'").fetchone()[0]
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write(f'### Free NBA API import\n- Games: {total}\n- Final: {final}\n- Player stats: **not available on free tier**\n- Betting status: **NO BET**\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: free-nba-games-${{ github.run_id }}
+          path: data/sports.db
+          retention-days: 30
