@@ -23,6 +23,9 @@ def main(argv=None):
     i = sub.add_parser("ingest", help="Import only BDL verified finished stats plus scheduled games")
     i.add_argument("--start", required=True, help="YYYY-MM-DD")
     i.add_argument("--end", required=True, help="YYYY-MM-DD")
+    free = sub.add_parser("games-free", help="Import real NBA fixtures/final scores without paid player stats")
+    free.add_argument("--days", type=int, default=7, help="Days to look back, max 90")
+    free.add_argument("--forward-days", type=int, default=2, help="Upcoming days, max 7")
     sub.add_parser("injuries", help="Snapshot paid injury data")
     o = sub.add_parser("odds", help="Snapshot current authorized NBA player odds; requires games imported first")
     o.add_argument("--region", default="us", help="Provider region code, e.g. us, eu, uk")
@@ -69,7 +72,15 @@ def main(argv=None):
         con.close()
         return
     con = connect(args.db)
-    if args.command == "ingest":
+    if args.command == "games-free":
+        from sports_betting_ai.free_games import ingest_free_games
+        if not 0 <= args.days <= 90 or not 0 <= args.forward_days <= 7 or args.days + args.forward_days > 90:
+            p.error("Invalid free game range: days=0..90, forward-days=0..7, sum <= 90")
+        today = datetime.now(timezone.utc).date()
+        start = (today - timedelta(days=args.days)).isoformat()
+        end = (today + timedelta(days=args.forward_days)).isoformat()
+        emit(ingest_free_games(BallDontLie(), con, start, end))
+    elif args.command == "ingest":
         if args.start > args.end:
             p.error("start must be <= end")
         emit(ingest_bdl(BallDontLie(), con, args.start, args.end, utcnow()))
