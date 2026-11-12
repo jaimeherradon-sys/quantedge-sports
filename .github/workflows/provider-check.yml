@@ -16,27 +16,41 @@ jobs:
           python-version: '3.11'
       - name: Install research CLI
         run: python -m pip install -e .
-      - name: Test BALLDONTLIE free endpoint
+      - name: Require BALLDONTLIE key and verify authentication
         shell: bash
         run: |
           if [[ -z "$BDL_API_KEY" ]]; then
-            echo 'BDL_API_KEY not configured'
-            echo '- BALLDONTLIE: missing API key' >> "$GITHUB_STEP_SUMMARY"
-          else
-            sbai check --provider bdl
-            echo '- BALLDONTLIE: basic endpoint verified' >> "$GITHUB_STEP_SUMMARY"
-            echo '- Player-game stats: NOT tested (paid tier required)' >> "$GITHUB_STEP_SUMMARY"
+            echo '::error::BDL_API_KEY is not configured. Add it in Actions secrets.'
+            echo '- BALLDONTLIE: missing key (FAILED)' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
-      - name: Test The Odds API free endpoint
+          sbai check --provider bdl
+          echo '- BALLDONTLIE: /v1/teams authenticated successfully' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Player-game stats: NOT verified (paid tier needed)' >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify free NBA games access
+        shell: bash
+        run: |
+          python - <<'PY'
+          from datetime import date, timedelta
+          from sports_betting_ai.connectors import BallDontLie, utcnow
+          today = date.today()
+          start = (today - timedelta(days=2)).isoformat()
+          end = today.isoformat()
+          rows = list(BallDontLie().games(start, end))
+          print(f"BALLDONTLIE /v1/games reached; {len(rows)} games found between {start} and {end}. Checked {utcnow()}.")
+          with open(__import__('os').environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write(f'- BALLDONTLIE: games endpoint verified; {len(rows)} games in {start} to {end} (not all completed)\n')
+          PY
+      - name: Test optional The Odds API key
         shell: bash
         run: |
           if [[ -z "$ODDS_API_KEY" ]]; then
-            echo 'ODDS_API_KEY not configured'
-            echo '- The Odds API: missing API key' >> "$GITHUB_STEP_SUMMARY"
+            echo '- The Odds API: not configured (optional)' >> "$GITHUB_STEP_SUMMARY"
           else
             sbai check --provider odds
-            echo '- The Odds API: sports endpoint verified; props not verified' >> "$GITHUB_STEP_SUMMARY"
+            echo '- The Odds API: sports endpoint verified; NBA props not verified' >> "$GITHUB_STEP_SUMMARY"
           fi
-      - name: Explain the limitation
+      - name: Explain limitations
+        if: always()
         run: |
-          echo '- NO BET expected until licensed historical stats, real odds and temporal validation are available.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- NO BET until licensed game stats, pre-game odds and chronological validation are available.' >> "$GITHUB_STEP_SUMMARY"
