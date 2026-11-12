@@ -23,7 +23,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: goat-trial-provider-access
+  group: balldontlie-shared-api-key
   cancel-in-progress: false
 jobs:
   goat:
