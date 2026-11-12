@@ -81,7 +81,7 @@ jobs:
           --db data/goat-trial.sqlite
           --report reports/goat-trial-audit.json
       - name: Show quality summary
-        if: inputs.action == 'backfill' || inputs.action == 'current-season' && success()
+        if: (inputs.action == 'backfill' || inputs.action == 'current-season') && success()
         run: |
           python - <<'PY'
           import json, os
@@ -99,7 +99,7 @@ jobs:
               f.write("- Status: **NO BET** (no validated model or market quotes)\n")
           PY
       - name: Always archive historic data, even if an API interruption occurs
-        if: inputs.action == 'backfill' || inputs.action == 'current-season' && always()
+        if: (inputs.action == 'backfill' || inputs.action == 'current-season') && always()
         uses: actions/upload-artifact@v4
         with:
           name: nba-goat-history-${{ github.run_id }}
