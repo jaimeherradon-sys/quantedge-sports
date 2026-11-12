@@ -3,13 +3,14 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'First run probe, then backfill only after paid stats access is confirmed'
+        description: 'probe, historical backfill, or current-season NBA player stats'
         required: true
         default: probe
         type: choice
         options:
           - probe
           - backfill
+          - current-season
       start_date:
         description: 'Historical starting date for backfill (YYYY-MM-DD, completed games only)'
         required: true
@@ -52,8 +53,27 @@ jobs:
       - name: Verify player stats and GOAT advanced endpoint
         if: inputs.action == 'probe'
         run: python -m sports_betting_ai.trial probe
+      - name: Set current NBA season range (through yesterday UTC)
+        if: inputs.action == 'current-season'
+        shell: bash
+        run: |
+          python - <<'PY'
+          from datetime import date, timedelta
+          from pathlib import Path
+          import os
+          season_start = date(2026, 10, 20)
+          end = date.today() - timedelta(days=1)
+          if end < season_start:
+              raise RuntimeError('2026-27 NBA regular season not started')
+          # Keep each run inside the importer maximum of 101 calendar days.
+          start = max(season_start, end - timedelta(days=89))
+          with open(os.environ['GITHUB_ENV'], 'a') as dest:
+              dest.write(f'START_DATE={start.isoformat()}\n')
+              dest.write(f'END_DATE={end.isoformat()}\n')
+          print(f'Importing NBA games from {start} to {end} (completed dates only)')
+          PY
       - name: Backfill verified player-game statistics at under 5 requests/minute
-        if: inputs.action == 'backfill'
+        if: inputs.action == 'backfill' || inputs.action == 'current-season'
         run: >-
           python -m sports_betting_ai.trial backfill
           --start "$START_DATE"
@@ -61,7 +81,7 @@ jobs:
           --db data/goat-trial.sqlite
           --report reports/goat-trial-audit.json
       - name: Show quality summary
-        if: inputs.action == 'backfill' && success()
+        if: inputs.action == 'backfill' || inputs.action == 'current-season' && success()
         run: |
           python - <<'PY'
           import json, os
@@ -79,7 +99,7 @@ jobs:
               f.write("- Status: **NO BET** (no validated model or market quotes)\n")
           PY
       - name: Always archive historic data, even if an API interruption occurs
-        if: inputs.action == 'backfill' && always()
+        if: inputs.action == 'backfill' || inputs.action == 'current-season' && always()
         uses: actions/upload-artifact@v4
         with:
           name: nba-goat-history-${{ github.run_id }}
