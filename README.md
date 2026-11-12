@@ -142,3 +142,22 @@ Run the workflow manually at
 `Actions → Import free NBA games (NO BET) → Run workflow`. It also runs once daily.
 The **Actions artifact** includes the SQLite file for each run for up to 30 days;
 it is not a durable database or a replacement for backups. Never commit API keys.
+
+## GOAT NBA odds: opening and live snapshots (research only)
+
+A manually dispatched GitHub Actions workflow collects **actual** BALLDONTLIE
+sportsbook prices from `/v2/odds`, `/v2/odds/player_props`, and the separate
+historical **opening** endpoints. It converts American prices to decimal,
+records provider vs retrieval timestamps independently, and rejects quotes
+obtained at/after tip-off for live forecasts.
+
+Start with `Actions → GOAT NBA odds - collect real market snapshots (NO BET)`.
+Set `mode=opening`, `game_date=2026-11-11`, `max_games=3`, or choose
+`mode=live` for future NBA games today, leaving the date blank. A GOAT API key
+must be stored as an Actions Secret. No vendor or market coverage is
+guaranteed. Download the Actions artifact and keep a permanent local copy.
+
+Historical **opening** prices are not the same as continuous line-history,
+closing prices, or our own contemporaneous observed market snapshots.
+This workflow has no automatic wagering and makes no EV+ selections.
+See [Spanish operational guide](docs/GOAT_ODDS_ES.md).
